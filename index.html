@@ -1,0 +1,143 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clothe-One | Fashion Store</title>
+    <meta name="description" content="Clothe-One - Boutique de vêtements tendance en Tunisie.">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="navbar">
+    <a href="#" class="logo">CLOTHE<span>-ONE</span></a>
+
+    <nav>
+        <a href="#home">Accueil</a>
+        <a href="#shop">Boutique</a>
+        <a href="#about">À propos</a>
+    </nav>
+
+    <button class="cart-btn" onclick="openCart()">
+        Panier <span id="cartCount">0</span>
+    </button>
+</header>
+
+<section class="hero" id="home">
+    <div class="hero-content">
+        <p class="subtitle">FASHION STORE • TUNISIA</p>
+        <h1>MORE THAN<br>JUST <span>CLOTHES.</span></h1>
+        <p>Discover your style. Be unique.</p>
+        <a href="#shop" class="main-btn">SHOP NOW →</a>
+    </div>
+</section>
+
+<section class="shop-section" id="shop">
+    <div class="section-heading">
+        <p class="subtitle">OUR COLLECTION</p>
+        <h2>Nos <span>Vêtements</span></h2>
+    </div>
+
+    <div class="products-grid" id="products"></div>
+</section>
+
+<section class="about" id="about">
+    <h2>Clothe-One</h2>
+    <p>Style • Quality • Confidence</p>
+    <p>Votre style, votre identité.</p>
+</section>
+
+<!-- PANIER -->
+<div class="modal hidden" id="cartModal">
+    <div class="modal-content">
+        <button class="close-btn" onclick="closeCart()">×</button>
+        <h2>Votre panier</h2>
+        <div id="cartItems"></div>
+        <h3>Total : <span id="cartTotal">0</span> DT</h3>
+        <button class="main-btn full" onclick="showCheckout()">
+            Commander
+        </button>
+    </div>
+</div>
+
+<!-- COMMANDE -->
+<div class="modal hidden" id="checkoutModal">
+    <div class="modal-content">
+        <button class="close-btn" onclick="closeCheckout()">×</button>
+        <h2>Finaliser la commande</h2>
+
+        <form id="checkoutForm">
+            <input id="firstName" placeholder="Prénom" required>
+            <input id="lastName" placeholder="Nom" required>
+            <input id="phone" type="tel" placeholder="Numéro téléphone" required>
+            <input id="city" placeholder="Ville" required>
+            <textarea id="address" placeholder="Adresse domicile complète" required></textarea>
+
+            <button type="submit" class="main-btn full">
+                CONFIRMER LA COMMANDE
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- ADMIN -->
+<section class="admin-section" id="admin">
+    <div class="admin-login">
+        <h2>ADMIN <span>PANEL</span></h2>
+        <input type="password" id="adminPassword" placeholder="Mot de passe">
+        <button class="main-btn" onclick="adminLogin()">Connexion</button>
+    </div>
+
+    <div id="adminDashboard" class="hidden">
+        <h2>Dashboard</h2>
+
+        <div class="admin-stats">
+            <div class="stat-card">
+                <h3 id="productCount">0</h3>
+                <p>Produits</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="orderCount">0</h3>
+                <p>Commandes</p>
+            </div>
+        </div>
+
+        <div class="admin-card">
+            <h3>Ajouter un produit</h3>
+
+            <form id="productForm">
+                <input id="productName" placeholder="Nom du produit" required>
+                <input id="productPrice" type="number" min="0" step="0.1" placeholder="Prix DT" required>
+                <input id="productSize" placeholder="Tailles (S, M, L, XL)" required>
+                <input id="productImage" type="file" accept="image/*" required>
+
+                <button class="main-btn full" type="submit">
+                    + Ajouter le produit
+                </button>
+            </form>
+        </div>
+
+        <div class="admin-card">
+            <h3>Gestion des produits</h3>
+            <div id="manageProducts"></div>
+        </div>
+
+        <div class="admin-card">
+            <h3>Gestion des commandes</h3>
+            <div id="manageOrders"></div>
+        </div>
+
+        <button class="logout-btn" onclick="adminLogout()">Déconnexion</button>
+    </div>
+</section>
+
+<footer>
+    <h2>CLOTHE<span>-ONE</span></h2>
+    <p>© 2026 Clothe-One — Fashion Store Tunisia</p>
+    <p>Be Unique.</p>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
