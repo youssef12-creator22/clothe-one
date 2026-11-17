@@ -1,500 +1,266 @@
+/* CLOTHE-ONE — Supabase connected */
+const SUPABASE_URL = "https://zzbfqnqfxwsticbrmcbw.supabase.co";
+const SUPABASE_KEY = "sb_publishable_KMs0ckMgfzTpaloAAnMARw_A9fHs1vQ";
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-/* CLOTHE-ONE - JAVASCRIPT */
-
-const ADMIN_PASSWORD = "CO2026";
-
-let products = JSON.parse(localStorage.getItem("co_products") || "[]");
-let orders = JSON.parse(localStorage.getItem("co_orders") || "[]");
+let products = [];
+let orders = [];
 let cart = [];
 let isAdmin = false;
 
-// SAFE TEXT
-function safe(text) {
-    return String(text).replace(/[&<>"']/g, char => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;"
-    })[char]);
+function safe(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  })[c]);
+}
+function money(value) { return Number(value || 0).toFixed(2); }
+
+async function loadProducts() {
+  const { data, error } = await supabaseClient.from("products").select("*").order("created_at", {ascending:false});
+  if (error) { console.error(error); alert("Impossible de charger les produits. Réessayez."); return; }
+  products = (data || []).map(p => ({id:p.id,name:p.name,price:Number(p.price),size:p.size || "",image:p.image_url || "",sold:!!p.sold}));
+  displayProducts();
+  displayManageProducts();
+  updateStats();
+}
+async function loadOrders() {
+  if (!isAdmin) return;
+  const { data, error } = await supabaseClient.from("orders").select("*").order("created_at", {ascending:false});
+  if (error) { console.error(error); alert("Impossible de charger les commandes."); return; }
+  orders = (data || []).map(o => ({
+    id:o.id, firstName:o.first_name, lastName:o.last_name, phone:o.phone,
+    city:o.city, address:o.address, items:o.items || [], total:Number(o.total),
+    status:o.status || "En attente"
+  }));
+  displayOrders();
+  updateStats();
 }
 
-// STORAGE
-function saveProducts() {
-    localStorage.setItem("co_products", JSON.stringify(products));
-}
-
-function saveOrders() {
-    localStorage.setItem("co_orders", JSON.stringify(orders));
-}
-
-// DISPLAY PRODUCTS
 function displayProducts() {
-    const container = document.getElementById("products");
-
-    if (products.length === 0) {
-        container.innerHTML = `
-            <p style="text-align:center;grid-column:1/-1">
-                Les produits seront bientôt disponibles.
-            </p>`;
-        return;
-    }
-
-    container.innerHTML = products.map((p, i) => `
-        <div class="product-card">
-            <img class="product-image"
-                 src="${p.image}"
-                 alt="${safe(p.name)}">
-
-            <div class="product-info">
-                <h3>${safe(p.name)}</h3>
-                <p class="product-size">Taille : ${safe(p.size)}</p>
-                <p class="product-price">${Number(p.price).toFixed(2)} DT</p>
-
-                ${p.sold
-                    ? `<div class="sold-badge">VENDUE</div>`
-                    : `<button class="main-btn"
-                        onclick="addToCart(${i})">
-                        Ajouter au panier
-                      </button>`
-                }
-            </div>
-        </div>
-    `).join("");
+  const container = document.getElementById("products");
+  if (!products.length) {
+    container.innerHTML = '<p style="text-align:center;grid-column:1/-1">Les produits seront bientôt disponibles.</p>';
+    return;
+  }
+  container.innerHTML = products.map((p,i) => `
+    <div class="product-card">
+      <img class="product-image" src="${safe(p.image)}" alt="${safe(p.name)}">
+      <div class="product-info">
+        <h3>${safe(p.name)}</h3>
+        <p class="product-size">Taille : ${safe(p.size)}</p>
+        <p class="product-price">${money(p.price)} DT</p>
+        ${p.sold ? '<div class="sold-badge">VENDUE</div>' : `<button class="main-btn" onclick="addToCart(${i})">Ajouter au panier</button>`}
+      </div>
+    </div>`).join("");
 }
-
-// CART
 function addToCart(index) {
-    const product = products[index];
-
-    if (!product || product.sold) {
-        alert("Cet article n'est plus disponible.");
-        return;
-    }
-
-    const existing = cart.find(item => item.index === index);
-
-    if (existing) {
-        existing.qty++;
-    } else {
-        cart.push({ index, qty: 1 });
-    }
-
-    updateCartCount();
-    alert("Produit ajouté au panier !");
+  const p = products[index];
+  if (!p || p.sold) return alert("Cet article n'est plus disponible.");
+  const found = cart.find(x => x.id === p.id);
+  if (found) found.qty++;
+  else cart.push({id:p.id,qty:1});
+  updateCartCount();
+  alert("Produit ajouté au panier !");
 }
-
+function getCartProduct(item) { return products.find(p => p.id === item.id); }
 function updateCartCount() {
-    const count = cart.reduce((sum, item) => sum + item.qty, 0);
-    document.getElementById("cartCount").textContent = count;
+  document.getElementById("cartCount").textContent = cart.reduce((s,x)=>s+x.qty,0);
 }
-
-function openCart() {
-    document.getElementById("cartModal").classList.remove("hidden");
-    displayCart();
-}
-
-function closeCart() {
-    document.getElementById("cartModal").classList.add("hidden");
-}
-
+function openCart() { document.getElementById("cartModal").classList.remove("hidden"); displayCart(); }
+function closeCart() { document.getElementById("cartModal").classList.add("hidden"); }
 function displayCart() {
-    const container = document.getElementById("cartItems");
-    let total = 0;
-
-    container.innerHTML = cart.map((item, i) => {
-        const product = products[item.index];
-
-        if (!product) return "";
-
-        total += Number(product.price) * item.qty;
-
-        return `
-            <div class="cart-item">
-                <h3>${safe(product.name)}</h3>
-                <p>${Number(product.price).toFixed(2)} DT</p>
-                <p>Quantité : ${item.qty}</p>
-
-                <button onclick="changeQuantity(${i},-1)">−</button>
-                <button onclick="changeQuantity(${i},1)">+</button>
-                <button onclick="removeFromCart(${i})">Supprimer</button>
-            </div>
-        `;
-    }).join("");
-
-    document.getElementById("cartTotal").textContent =
-        total.toFixed(2);
+  const container = document.getElementById("cartItems");
+  let total = 0;
+  container.innerHTML = cart.map((item,i) => {
+    const p = getCartProduct(item);
+    if (!p) return "";
+    total += p.price * item.qty;
+    return `<div class="cart-item"><h3>${safe(p.name)}</h3><p>${money(p.price)} DT</p><p>Quantité : ${item.qty}</p>
+      <button onclick="changeQuantity(${i},-1)">−</button>
+      <button onclick="changeQuantity(${i},1)">+</button>
+      <button onclick="removeFromCart(${i})">Supprimer</button></div>`;
+  }).join("");
+  document.getElementById("cartTotal").textContent = money(total);
 }
-
-function changeQuantity(index, amount) {
-    const item = cart[index];
-
-    if (!item) return;
-
-    if (amount > 0 && products[item.index].sold) {
-        alert("Cet article est vendu.");
-        return;
-    }
-
-    item.qty += amount;
-
-    if (item.qty <= 0) {
-        cart.splice(index, 1);
-    }
-
-    updateCartCount();
-    displayCart();
+function changeQuantity(i,amount) {
+  const item=cart[i], p=item && getCartProduct(item);
+  if (!item || !p) return;
+  if (amount>0 && p.sold) return alert("Cet article est vendu.");
+  item.qty += amount;
+  if (item.qty<=0) cart.splice(i,1);
+  updateCartCount(); displayCart();
 }
-
-function removeFromCart(index) {
-    cart.splice(index, 1);
-    updateCartCount();
-    displayCart();
-}
-
-// CHECKOUT
+function removeFromCart(i) { cart.splice(i,1); updateCartCount(); displayCart(); }
 function showCheckout() {
-    if (cart.length === 0) {
-        alert("Votre panier est vide.");
-        return;
-    }
-
-    document.getElementById("checkoutModal").classList.remove("hidden");
+  if (!cart.length) return alert("Votre panier est vide.");
+  document.getElementById("checkoutModal").classList.remove("hidden");
 }
+function closeCheckout() { document.getElementById("checkoutModal").classList.add("hidden"); }
 
-function closeCheckout() {
-    document.getElementById("checkoutModal").classList.add("hidden");
-}
-
-document.getElementById("checkoutForm").addEventListener("submit", function(e) {
-    e.preventDefault();
-
-    if (cart.length === 0) {
-        alert("Votre panier est vide.");
-        return;
-    }
-
-    // Verify availability again
-    for (const item of cart) {
-        if (!products[item.index] || products[item.index].sold) {
-            alert("Un produit de votre panier n'est plus disponible.");
-            return;
-        }
-    }
-
-    const items = cart.map(item => {
-        const product = products[item.index];
-
-        return {
-            name: product.name,
-            price: Number(product.price),
-            size: product.size,
-            qty: item.qty,
-            productIndex: item.index
-        };
-    });
-
-    const total = items.reduce(
-        (sum, item) => sum + item.price * item.qty,
-        0
-    );
-
-    const order = {
-        id: Date.now(),
-        firstName: document.getElementById("firstName").value.trim(),
-        lastName: document.getElementById("lastName").value.trim(),
-        phone: document.getElementById("phone").value.trim(),
-        city: document.getElementById("city").value.trim(),
-        address: document.getElementById("address").value.trim(),
-        items,
-        total,
-        status: "En attente"
-    };
-
-    orders.push(order);
-    saveOrders();
-
-    cart = [];
-    updateCartCount();
-
-    this.reset();
-
-    closeCart();
-    closeCheckout();
-
-    alert("Commande enregistrée ! Merci ❤️");
-
-    if (isAdmin) {
-        displayOrders();
-    }
+document.getElementById("checkoutForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  if (!cart.length) return alert("Votre panier est vide.");
+  const items = [];
+  for (const entry of cart) {
+    const p = getCartProduct(entry);
+    if (!p || p.sold) return alert("Un produit de votre panier n'est plus disponible.");
+    items.push({product_id:p.id,name:p.name,price:p.price,size:p.size,qty:entry.qty});
+  }
+  const total = items.reduce((sum,x)=>sum+x.price*x.qty,0);
+  const payload = {
+    first_name:document.getElementById("firstName").value.trim(),
+    last_name:document.getElementById("lastName").value.trim(),
+    phone:document.getElementById("phone").value.trim(),
+    city:document.getElementById("city").value.trim(),
+    address:document.getElementById("address").value.trim(),
+    items,total,status:"En attente"
+  };
+  const {error} = await supabaseClient.from("orders").insert(payload);
+  if (error) { console.error(error); alert("Erreur lors de l'envoi. Vérifiez votre connexion et réessayez."); return; }
+  cart=[]; updateCartCount(); this.reset(); closeCart(); closeCheckout();
+  alert("Commande envoyée avec succès ! Merci ❤️");
+  if (isAdmin) await loadOrders();
 });
 
-// ADMIN LOGIN
-function adminLogin() {
-    const password = document.getElementById("adminPassword").value;
-
-    if (password === ADMIN_PASSWORD) {
-        isAdmin = true;
-
-        document.getElementById("adminDashboard")
-            .classList.remove("hidden");
-
-        document.querySelector(".admin-login")
-            .classList.add("hidden");
-
-        displayManageProducts();
-        displayOrders();
-        updateStats();
-
-        alert("Bienvenue dans Admin Panel !");
-    } else {
-        alert("Mot de passe incorrect !");
-    }
+async function adminLogin() {
+  const email = document.getElementById("adminEmail").value.trim();
+  const password = document.getElementById("adminPassword").value;
+  if (!email || !password) return alert("Entrez votre email et mot de passe.");
+  const {error} = await supabaseClient.auth.signInWithPassword({email,password});
+  if (error) { console.error(error); return alert("Email ou mot de passe incorrect."); }
+  await showAdminDashboard();
+}
+async function showAdminDashboard() {
+  isAdmin = true;
+  document.getElementById("adminDashboard").classList.remove("hidden");
+  document.querySelector(".admin-login").classList.add("hidden");
+  await loadProducts();
+  await loadOrders();
+  alert("Bienvenue dans Admin Panel !");
+}
+async function adminLogout() {
+  await supabaseClient.auth.signOut();
+  isAdmin=false; orders=[];
+  document.getElementById("adminDashboard").classList.add("hidden");
+  document.querySelector(".admin-login").classList.remove("hidden");
+  document.getElementById("adminPassword").value="";
+  document.getElementById("adminEmail").value="";
+  displayOrders();
 }
 
-function adminLogout() {
-    isAdmin = false;
-
-    document.getElementById("adminDashboard")
-        .classList.add("hidden");
-
-    document.querySelector(".admin-login")
-        .classList.remove("hidden");
-
-    document.getElementById("adminPassword").value = "";
-}
-
-// ADD PRODUCT
-document.getElementById("productForm").addEventListener("submit", function(e) {
-    e.preventDefault();
-
-    if (!isAdmin) return;
-
-    const name = document.getElementById("productName").value.trim();
-    const price = Number(document.getElementById("productPrice").value);
-    const size = document.getElementById("productSize").value.trim();
-    const file = document.getElementById("productImage").files[0];
-
-    if (!name || !size || !file || price < 0 || !Number.isFinite(price)) {
-        alert("Vérifiez les informations du produit.");
-        return;
-    }
-
-    if (!file.type.startsWith("image/")) {
-        alert("Veuillez choisir une image.");
-        return;
-    }
-
-    if (file.size > 2 * 1024 * 1024) {
-        alert("Image trop grande. Maximum 2 MB.");
-        return;
-    }
-
-    const reader = new FileReader();
-
-    reader.onload = function() {
-        products.push({
-            id: Date.now(),
-            name,
-            price,
-            size,
-            image: reader.result,
-            sold: false
-        });
-
-        try {
-            saveProducts();
-        } catch (error) {
-            products.pop();
-            alert("Stockage insuffisant. Utilisez une image plus petite.");
-            return;
-        }
-
-        displayProducts();
-        displayManageProducts();
-        updateStats();
-
-        document.getElementById("productForm").reset();
-
-        alert("Produit ajouté avec succès !");
-    };
-
-    reader.readAsDataURL(file);
+document.getElementById("productForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  if (!isAdmin) return;
+  const name=document.getElementById("productName").value.trim();
+  const price=Number(document.getElementById("productPrice").value);
+  const size=document.getElementById("productSize").value.trim();
+  const file=document.getElementById("productImage").files[0];
+  if (!name || !size || !file || !Number.isFinite(price) || price<0) return alert("Vérifiez les informations du produit.");
+  if (!file.type.startsWith("image/")) return alert("Veuillez choisir une image.");
+  if (file.size>5*1024*1024) return alert("Image trop grande. Maximum 5 MB.");
+  const cleanName=file.name.replace(/[^a-zA-Z0-9._-]/g,"-");
+  const path=crypto.randomUUID()+"-"+cleanName;
+  const {error:uploadError}=await supabaseClient.storage.from("product-images").upload(path,file,{upsert:false});
+  if (uploadError) { console.error(uploadError); return alert("Erreur upload image. Vérifiez les droits Storage."); }
+  const {data:urlData}=supabaseClient.storage.from("product-images").getPublicUrl(path);
+  const {error}=await supabaseClient.from("products").insert({name,price,size,image_url:urlData.publicUrl,sold:false});
+  if (error) {
+    console.error(error);
+    await supabaseClient.storage.from("product-images").remove([path]);
+    return alert("Erreur ajout produit. Vérifiez les permissions Supabase.");
+  }
+  this.reset();
+  await loadProducts();
+  alert("Produit ajouté ! Il est maintenant visible pour tous les visiteurs.");
 });
 
-// PRODUCT MANAGEMENT
 function displayManageProducts() {
-    const container = document.getElementById("manageProducts");
-
-    if (products.length === 0) {
-        container.innerHTML = "<p>Aucun produit.</p>";
-        return;
-    }
-
-    container.innerHTML = products.map((p, i) => `
-        <div class="manage-item">
-            <img src="${p.image}" alt="${safe(p.name)}">
-            <strong>${safe(p.name)}</strong>
-            <p>${Number(p.price).toFixed(2)} DT — ${safe(p.size)}</p>
-            <p>${p.sold ? "VENDUE" : "Disponible"}</p>
-
-            <button onclick="editPrice(${i})">Prix</button>
-            <button onclick="editProductName(${i})">Nom</button>
-            <button onclick="toggleSold(${i})">
-                ${p.sold ? "Disponible" : "VENDUE"}
-            </button>
-            <button onclick="deleteProduct(${i})">Supprimer</button>
-        </div>
-    `).join("");
+  const container=document.getElementById("manageProducts");
+  if (!isAdmin) { container.innerHTML=""; return; }
+  if (!products.length) { container.innerHTML="<p>Aucun produit.</p>"; return; }
+  container.innerHTML=products.map((p,i)=>`
+    <div class="manage-item">
+      <img src="${safe(p.image)}" alt="${safe(p.name)}">
+      <strong>${safe(p.name)}</strong><p>${money(p.price)} DT — ${safe(p.size)}</p>
+      <p>${p.sold?"VENDUE":"Disponible"}</p>
+      <button onclick="editPrice(${i})">Prix</button>
+      <button onclick="editProductName(${i})">Nom</button>
+      <button onclick="toggleSold(${i})">${p.sold?"Disponible":"VENDUE"}</button>
+      <button onclick="deleteProduct(${i})">Supprimer</button>
+    </div>`).join("");
+}
+async function editPrice(i) {
+  if (!isAdmin || !products[i]) return;
+  const value=prompt("Nouveau prix DT:",products[i].price);
+  if (value===null || value.trim()==="") return;
+  const price=Number(value);
+  if (!Number.isFinite(price) || price<0) return alert("Prix invalide.");
+  const {error}=await supabaseClient.from("products").update({price}).eq("id",products[i].id);
+  if (error) return alert("Erreur modification prix.");
+  await loadProducts();
+}
+async function editProductName(i) {
+  if (!isAdmin || !products[i]) return;
+  const name=prompt("Nouveau nom:",products[i].name);
+  if (!name || !name.trim()) return;
+  const {error}=await supabaseClient.from("products").update({name:name.trim()}).eq("id",products[i].id);
+  if (error) return alert("Erreur modification nom.");
+  await loadProducts();
+}
+async function toggleSold(i) {
+  if (!isAdmin || !products[i]) return;
+  const {error}=await supabaseClient.from("products").update({sold:!products[i].sold}).eq("id",products[i].id);
+  if (error) return alert("Erreur modification disponibilité.");
+  await loadProducts();
+}
+async function deleteProduct(i) {
+  if (!isAdmin || !products[i] || !confirm("Supprimer ce produit ?")) return;
+  const {error}=await supabaseClient.from("products").delete().eq("id",products[i].id);
+  if (error) return alert("Erreur suppression produit.");
+  cart=cart.filter(x=>x.id!==products[i].id);
+  updateCartCount();
+  await loadProducts();
 }
 
-function editPrice(index) {
-    if (!isAdmin) return;
-
-    const price = prompt("Nouveau prix DT:", products[index].price);
-
-    if (price === null || price.trim() === "") return;
-
-    const value = Number(price);
-
-    if (!Number.isFinite(value) || value < 0) {
-        alert("Prix invalide.");
-        return;
-    }
-
-    products[index].price = value;
-
-    saveProducts();
-    displayProducts();
-    displayManageProducts();
-}
-
-function editProductName(index) {
-    if (!isAdmin) return;
-
-    const name = prompt("Nouveau nom:", products[index].name);
-
-    if (name && name.trim()) {
-        products[index].name = name.trim();
-
-        saveProducts();
-        displayProducts();
-        displayManageProducts();
-    }
-}
-
-function toggleSold(index) {
-    if (!isAdmin) return;
-
-    products[index].sold = !products[index].sold;
-
-    saveProducts();
-    displayProducts();
-    displayManageProducts();
-}
-
-function deleteProduct(index) {
-    if (!isAdmin) return;
-
-    if (confirm("Supprimer ce produit ?")) {
-        products.splice(index, 1);
-
-        // Remove deleted product from the current cart
-        cart = cart.filter(item => item.index !== index);
-
-        // Update indices after deletion
-        cart.forEach(item => {
-            if (item.index > index) item.index--;
-        });
-
-        saveProducts();
-        updateCartCount();
-        displayProducts();
-        displayManageProducts();
-        updateStats();
-    }
-}
-
-// ORDER MANAGEMENT
 function displayOrders() {
-    const container = document.getElementById("manageOrders");
-
-    if (orders.length === 0) {
-        container.innerHTML = "<p>Aucune commande pour le moment.</p>";
-        return;
-    }
-
-    container.innerHTML = orders.map((order, i) => `
-        <div class="manage-item">
-            <h3>Commande #${i + 1}</h3>
-
-            <p>Client : ${safe(order.firstName)} ${safe(order.lastName)}</p>
-            <p>Téléphone : ${safe(order.phone)}</p>
-            <p>Ville : ${safe(order.city)}</p>
-            <p>Adresse : ${safe(order.address)}</p>
-
-            <p>Articles :</p>
-            ${order.items.map(item => `
-                <p>${safe(item.name)} × ${item.qty} — ${item.price} DT</p>
-            `).join("")}
-
-            <strong>Total : ${Number(order.total).toFixed(2)} DT</strong>
-
-            <p class="status">Statut : ${safe(order.status)}</p>
-
-            <button onclick="changeOrderStatus(${i},'Validée')">
-                Valider
-            </button>
-
-            <button onclick="changeOrderStatus(${i},'Refusée')">
-                Refuser
-            </button>
-
-            <button onclick="changeOrderStatus(${i},'En livraison')">
-                En livraison
-            </button>
-
-            <button onclick="changeOrderStatus(${i},'Livrée')">
-                Livrée
-            </button>
-
-            <button onclick="deleteOrder(${i})">
-                Supprimer
-            </button>
-        </div>
-    `).join("");
+  const container=document.getElementById("manageOrders");
+  if (!isAdmin) { container.innerHTML=""; return; }
+  if (!orders.length) { container.innerHTML="<p>Aucune commande pour le moment.</p>"; return; }
+  container.innerHTML=orders.map((o,i)=>`
+    <div class="manage-item">
+      <h3>Commande #${o.id}</h3>
+      <p>Client : ${safe(o.firstName)} ${safe(o.lastName)}</p>
+      <p>Téléphone : ${safe(o.phone)}</p><p>Ville : ${safe(o.city)}</p><p>Adresse : ${safe(o.address)}</p>
+      <p>Articles :</p>${o.items.map(x=>`<p>${safe(x.name)} × ${Number(x.qty)} — ${money(x.price)} DT</p>`).join("")}
+      <strong>Total : ${money(o.total)} DT</strong><p class="status">Statut : ${safe(o.status)}</p>
+      <button onclick="changeOrderStatus(${i},'Validée')">Valider</button>
+      <button onclick="changeOrderStatus(${i},'Refusée')">Refuser</button>
+      <button onclick="changeOrderStatus(${i},'En livraison')">En livraison</button>
+      <button onclick="changeOrderStatus(${i},'Livrée')">Livrée</button>
+      <button onclick="deleteOrder(${i})">Supprimer</button>
+    </div>`).join("");
 }
-
-function changeOrderStatus(index, status) {
-    if (!isAdmin) return;
-
-    orders[index].status = status;
-
-    saveOrders();
-    displayOrders();
+async function changeOrderStatus(i,status) {
+  if (!isAdmin || !orders[i]) return;
+  const {error}=await supabaseClient.from("orders").update({status}).eq("id",orders[i].id);
+  if (error) return alert("Erreur changement statut.");
+  await loadOrders();
 }
-
-function deleteOrder(index) {
-    if (!isAdmin) return;
-
-    if (confirm("Supprimer cette commande ?")) {
-        orders.splice(index, 1);
-
-        saveOrders();
-        displayOrders();
-        updateStats();
-    }
+async function deleteOrder(i) {
+  if (!isAdmin || !orders[i] || !confirm("Supprimer cette commande ?")) return;
+  const {error}=await supabaseClient.from("orders").delete().eq("id",orders[i].id);
+  if (error) return alert("Erreur suppression commande.");
+  await loadOrders();
 }
-
-// DASHBOARD STATS
 function updateStats() {
-    document.getElementById("productCount").textContent =
-        products.length;
-
-    document.getElementById("orderCount").textContent =
-        orders.length;
+  document.getElementById("productCount").textContent=products.length;
+  document.getElementById("orderCount").textContent=orders.length;
 }
 
-// INITIALIZE
-displayProducts();
-updateCartCount();
+async function initialize() {
+  await loadProducts();
+  const {data:{session}}=await supabaseClient.auth.getSession();
+  if (session) await showAdminDashboard();
+  updateCartCount();
+}
+initialize();
