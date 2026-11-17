@@ -85,7 +85,8 @@
 <section class="admin-section" id="admin">
     <div class="admin-login">
         <h2>ADMIN <span>PANEL</span></h2>
-        <input type="password" id="adminPassword" placeholder="Mot de passe">
+        <input type="email" id="adminEmail" placeholder="Email Admin" autocomplete="username" required>
+        <input type="password" id="adminPassword" placeholder="Mot de passe" autocomplete="current-password" required>
         <button class="main-btn" onclick="adminLogin()">Connexion</button>
     </div>
 
@@ -138,6 +139,7 @@
     <p>Be Unique.</p>
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="script.js"></script>
 </body>
 </html>
