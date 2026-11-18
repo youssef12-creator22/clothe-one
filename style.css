@@ -525,3 +525,79 @@ footer p {
 #admin:target {
     display: block;
 }
+
+
+/* Product photo viewer and multi-image upload */
+.product-image {
+    cursor: zoom-in;
+    display: block;
+}
+.upload-hint {
+    display: block;
+    color: #aaa;
+    font-size: 12px;
+    margin: 2px 0 12px;
+}
+.image-viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+    background: rgba(0,0,0,.96);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 55px 70px 70px;
+}
+.image-viewer img {
+    max-width: min(100%, 1100px);
+    max-height: 82vh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 8px;
+    box-shadow: 0 10px 45px rgba(0,0,0,.6);
+}
+.viewer-close, .viewer-arrow {
+    position: absolute;
+    border: 0;
+    color: #fff;
+    background: rgba(30,30,30,.85);
+    cursor: pointer;
+    z-index: 2;
+}
+.viewer-close {
+    top: 18px;
+    right: 25px;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    font-size: 34px;
+}
+.viewer-arrow {
+    top: 50%;
+    transform: translateY(-50%);
+    width: 48px;
+    height: 58px;
+    border-radius: 8px;
+    font-size: 42px;
+    line-height: 1;
+}
+.viewer-prev { left: 15px; }
+.viewer-next { right: 15px; }
+#viewerCounter {
+    position: absolute;
+    bottom: 22px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    color: #fff;
+    font-weight: bold;
+}
+@media (max-width: 600px) {
+    .image-viewer { padding: 55px 48px 65px; }
+    .image-viewer img { max-width: 100%; max-height: 78vh; }
+    .viewer-arrow { width: 38px; height: 48px; font-size: 34px; }
+    .viewer-prev { left: 5px; }
+    .viewer-next { right: 5px; }
+    .viewer-close { right: 12px; }
+}
