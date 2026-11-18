@@ -7,6 +7,8 @@ let products = [];
 let orders = [];
 let cart = [];
 let isAdmin = false;
+let viewerImages = [];
+let viewerIndex = 0;
 
 function safe(value) {
   return String(value ?? "").replace(/[&<>"']/g, c => ({
@@ -18,7 +20,17 @@ function money(value) { return Number(value || 0).toFixed(2); }
 async function loadProducts() {
   const { data, error } = await supabaseClient.from("products").select("*").order("created_at", {ascending:false});
   if (error) { console.error(error); alert("Impossible de charger les produits. Réessayez."); return; }
-  products = (data || []).map(p => ({id:p.id,name:p.name,price:Number(p.price),size:p.size || "",image:p.image_url || "",sold:!!p.sold}));
+  products = (data || []).map(p => {
+    let images = [];
+    try {
+      const parsed = JSON.parse(p.image_url || '""');
+      images = Array.isArray(parsed) ? parsed : [parsed || p.image_url];
+    } catch (_) {
+      images = [p.image_url || ""];
+    }
+    images = images.filter(Boolean);
+    return {id:p.id,name:p.name,price:Number(p.price),size:p.size || "",image:images[0] || "",images,sold:!!p.sold};
+  });
   displayProducts();
   displayManageProducts();
   updateStats();
@@ -44,7 +56,7 @@ function displayProducts() {
   }
   container.innerHTML = products.map((p,i) => `
     <div class="product-card">
-      <img class="product-image" src="${safe(p.image)}" alt="${safe(p.name)}">
+      <img class="product-image" src="${safe(p.image)}" alt="${safe(p.name)}" onclick="openImageViewer(${i},0)" loading="lazy">
       <div class="product-info">
         <h3>${safe(p.name)}</h3>
         <p class="product-size">Taille : ${safe(p.size)}</p>
@@ -53,6 +65,39 @@ function displayProducts() {
       </div>
     </div>`).join("");
 }
+
+function openImageViewer(productIndex, imageIndex=0) {
+  const product=products[productIndex];
+  if (!product) return;
+  viewerImages=(product.images && product.images.length ? product.images : [product.image]).filter(Boolean);
+  if (!viewerImages.length) return;
+  viewerIndex=Math.max(0,Math.min(imageIndex,viewerImages.length-1));
+  renderImageViewer();
+  document.getElementById("imageViewer").classList.remove("hidden");
+  document.body.style.overflow="hidden";
+}
+function renderImageViewer() {
+  const image=document.getElementById("viewerImage");
+  image.src=viewerImages[viewerIndex];
+  document.getElementById("viewerCounter").textContent=viewerImages.length>1 ? (viewerIndex+1)+" / "+viewerImages.length : "";
+  document.querySelector(".viewer-prev").style.display=viewerImages.length>1 ? "block" : "none";
+  document.querySelector(".viewer-next").style.display=viewerImages.length>1 ? "block" : "none";
+}
+function changeViewerImage(direction,event) {
+  if (event) event.stopPropagation();
+  if (!viewerImages.length) return;
+  viewerIndex=(viewerIndex+direction+viewerImages.length)%viewerImages.length;
+  renderImageViewer();
+}
+function closeImageViewer(event) {
+  if (event) {
+    if (event.target && event.target.id==="viewerImage") return;
+    if (event.currentTarget && event.currentTarget!==event.target && !event.target.classList.contains("viewer-close")) return;
+  }
+  document.getElementById("imageViewer").classList.add("hidden");
+  document.body.style.overflow="";
+}
+
 function addToCart(index) {
   const p = products[index];
   if (!p || p.sold) return alert("Cet article n'est plus disponible.");
@@ -154,19 +199,30 @@ document.getElementById("productForm").addEventListener("submit", async function
   const name=document.getElementById("productName").value.trim();
   const price=Number(document.getElementById("productPrice").value);
   const size=document.getElementById("productSize").value.trim();
-  const file=document.getElementById("productImage").files[0];
-  if (!name || !size || !file || !Number.isFinite(price) || price<0) return alert("Vérifiez les informations du produit.");
-  if (!file.type.startsWith("image/")) return alert("Veuillez choisir une image.");
-  if (file.size>5*1024*1024) return alert("Image trop grande. Maximum 5 MB.");
-  const cleanName=file.name.replace(/[^a-zA-Z0-9._-]/g,"-");
-  const path=crypto.randomUUID()+"-"+cleanName;
-  const {error:uploadError}=await supabaseClient.storage.from("product-images").upload(path,file,{upsert:false});
-  if (uploadError) { console.error(uploadError); return alert("Erreur upload image. Vérifiez les droits Storage."); }
-  const {data:urlData}=supabaseClient.storage.from("product-images").getPublicUrl(path);
-  const {error}=await supabaseClient.from("products").insert({name,price,size,image_url:urlData.publicUrl,sold:false});
+  const files=Array.from(document.getElementById("productImage").files || []);
+  if (!name || !size || !files.length || !Number.isFinite(price) || price<0) return alert("Vérifiez les informations du produit.");
+  if (files.length>8) return alert("تنجم تزيد حتى 8 تصاور للمنتج الواحد.");
+  if (files.some(file=>!file.type.startsWith("image/"))) return alert("Veuillez choisir uniquement des images.");
+  if (files.some(file=>file.size>5*1024*1024)) return alert("Chaque image doit faire maximum 5 MB.");
+  const uploadedPaths=[];
+  const imageUrls=[];
+  for (const file of files) {
+    const cleanName=file.name.replace(/[^a-zA-Z0-9._-]/g,"-");
+    const path=crypto.randomUUID()+"-"+cleanName;
+    const {error:uploadError}=await supabaseClient.storage.from("product-images").upload(path,file,{upsert:false});
+    if (uploadError) {
+      console.error(uploadError);
+      if (uploadedPaths.length) await supabaseClient.storage.from("product-images").remove(uploadedPaths);
+      return alert("Erreur upload image. Vérifiez les droits Storage.");
+    }
+    uploadedPaths.push(path);
+    const {data:urlData}=supabaseClient.storage.from("product-images").getPublicUrl(path);
+    imageUrls.push(urlData.publicUrl);
+  }
+  const {error}=await supabaseClient.from("products").insert({name,price,size,image_url:JSON.stringify(imageUrls),sold:false});
   if (error) {
     console.error(error);
-    await supabaseClient.storage.from("product-images").remove([path]);
+    await supabaseClient.storage.from("product-images").remove(uploadedPaths);
     return alert("Erreur ajout produit. Vérifiez les permissions Supabase.");
   }
   this.reset();
