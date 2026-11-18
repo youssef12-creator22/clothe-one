@@ -601,3 +601,19 @@ footer p {
     .viewer-next { right: 5px; }
     .viewer-close { right: 12px; }
 }
+
+
+/* Clear red sold label shown on the public shop to every visitor */
+.sold-badge {
+    display: block;
+    background: #250000;
+    color: #ff1f2d;
+    border: 1px solid #e50914;
+    padding: 12px 10px;
+    text-align: center;
+    font-weight: 900;
+    font-size: 16px;
+    letter-spacing: 2px;
+    border-radius: 5px;
+    text-transform: uppercase;
+}
