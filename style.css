@@ -514,3 +514,14 @@ footer p {
         padding: 22px;
     }
 }
+
+
+/* Keep the admin area off the public storefront.
+   Open the private admin entry with the URL ending in #admin. */
+#admin {
+    display: none;
+}
+
+#admin:target {
+    display: block;
+}
