@@ -31,8 +31,12 @@ async function loadProducts() {
     images = images.filter(Boolean);
     return {id:p.id,name:p.name,price:Number(p.price),size:p.size || "",image:images[0] || "",images,sold:!!p.sold};
   });
+  const liveIds=new Set(products.map(p=>p.id));
+  cart=cart.filter(item=>liveIds.has(item.id) && !products.find(p=>p.id===item.id)?.sold);
+  updateCartCount();
   displayProducts();
   displayManageProducts();
+  if (document.getElementById("cartModal") && !document.getElementById("cartModal").classList.contains("hidden")) displayCart();
   updateStats();
 }
 async function loadOrders() {
@@ -268,14 +272,37 @@ async function toggleSold(i) {
   const {error}=await supabaseClient.from("products").update({sold:!products[i].sold}).eq("id",products[i].id);
   if (error) return alert("Erreur modification disponibilité.");
   await loadProducts();
+  alert(products[i]?.sold ? "Produit marqué comme vendu pour tous les visiteurs." : "Produit remis disponible pour tous les visiteurs.");
 }
 async function deleteProduct(i) {
-  if (!isAdmin || !products[i] || !confirm("Supprimer ce produit ?")) return;
-  const {error}=await supabaseClient.from("products").delete().eq("id",products[i].id);
-  if (error) return alert("Erreur suppression produit.");
-  cart=cart.filter(x=>x.id!==products[i].id);
+  const product=products[i];
+  if (!isAdmin || !product || !confirm("Supprimer ce produit pour tous les visiteurs ?")) return;
+
+  // Remove the database row first: this immediately removes it from the public catalogue.
+  const {error}=await supabaseClient.from("products").delete().eq("id",product.id);
+  if (error) {
+    console.error(error);
+    return alert("Erreur suppression produit. Vérifiez les permissions Supabase.");
+  }
+
+  // Also clean up all product photos from the public Storage bucket.
+  const imagePaths=(product.images || [product.image]).map(url=>{
+    try {
+      const marker="/storage/v1/object/public/product-images/";
+      const position=String(url).indexOf(marker);
+      return position>=0 ? decodeURIComponent(String(url).slice(position+marker.length).split("?")[0]) : null;
+    } catch (_) { return null; }
+  }).filter(Boolean);
+
+  if (imagePaths.length) {
+    const {error:storageError}=await supabaseClient.storage.from("product-images").remove(imagePaths);
+    if (storageError) console.warn("Produit supprimé, mais certaines images n'ont pas pu être supprimées:",storageError);
+  }
+
+  cart=cart.filter(x=>x.id!==product.id);
   updateCartCount();
   await loadProducts();
+  alert("Produit supprimé du magasin pour tous les visiteurs.");
 }
 
 function displayOrders() {
@@ -320,3 +347,9 @@ async function initialize() {
   updateCartCount();
 }
 initialize();
+
+// Refresh the shared catalogue periodically so changes appear for visitors
+// who already have the shop open, without requiring a manual page reload.
+setInterval(() => {
+  if (document.visibilityState === "visible") loadProducts();
+}, 15000);
