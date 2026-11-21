@@ -24,12 +24,13 @@ async function loadProducts() {
     let images = [];
     try {
       const parsed = JSON.parse(p.image_url || '""');
-      images = Array.isArray(parsed) ? parsed : [parsed || p.image_url];
+      images = Array.isArray(parsed) ? parsed : (parsed && typeof parsed === "object" && Array.isArray(parsed.images) ? parsed.images : [parsed || p.image_url]);
+      var embeddedModelUrl = parsed && !Array.isArray(parsed) && typeof parsed === "object" ? (parsed.model_url || "") : "";
     } catch (_) {
       images = [p.image_url || ""];
     }
     images = images.filter(Boolean);
-    return {id:p.id,name:p.name,price:Number(p.price),size:p.size || "",image:images[0] || "",images,model_url:p.model_url || "",sold:!!p.sold};
+    return {id:p.id,name:p.name,price:Number(p.price),size:p.size || "",image:images[0] || "",images,model_url:p.model_url || embeddedModelUrl || "",sold:!!p.sold};
   });
   const liveIds=new Set(products.map(p=>p.id));
   cart=cart.filter(item=>liveIds.has(item.id) && !products.find(p=>p.id===item.id)?.sold);
@@ -234,7 +235,7 @@ document.getElementById("productForm").addEventListener("submit", async function
     uploadedPaths.push(modelPath);
     modelUrl=supabaseClient.storage.from("product-images").getPublicUrl(modelPath).data.publicUrl;
   }
-  const {error}=await supabaseClient.from("products").insert({name,price,size,image_url:JSON.stringify(imageUrls),model_url:modelUrl || null,sold:false});
+  const {error}=await supabaseClient.from("products").insert({name,price,size,image_url:JSON.stringify({images:imageUrls,model_url:modelUrl}),sold:false});
   if (error) {
     console.error(error);
     await supabaseClient.storage.from("product-images").remove(uploadedPaths);
@@ -298,7 +299,7 @@ async function deleteProduct(i) {
   }
 
   // Also clean up all product photos from the public Storage bucket.
-  const imagePaths=(product.images || [product.image]).map(url=>{
+  const imagePaths=(product.images || [product.image]).concat(product.model_url ? [product.model_url] : []).map(url=>{
     try {
       const marker="/storage/v1/object/public/product-images/";
       const position=String(url).indexOf(marker);
