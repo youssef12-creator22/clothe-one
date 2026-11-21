@@ -53,7 +53,7 @@
 
   function rotateByPixels(delta) {
     dragRemainder += delta;
-    const step = 34;
+    const step = 18;
     while (Math.abs(dragRemainder) >= step) {
       const direction = dragRemainder > 0 ? -1 : 1;
       frame = (frame + direction + frames.length) % frames.length;
