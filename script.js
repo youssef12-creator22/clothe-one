@@ -29,7 +29,7 @@ async function loadProducts() {
       images = [p.image_url || ""];
     }
     images = images.filter(Boolean);
-    return {id:p.id,name:p.name,price:Number(p.price),size:p.size || "",image:images[0] || "",images,sold:!!p.sold};
+    return {id:p.id,name:p.name,price:Number(p.price),size:p.size || "",image:images[0] || "",images,model_url:p.model_url || "",sold:!!p.sold};
   });
   const liveIds=new Set(products.map(p=>p.id));
   cart=cart.filter(item=>liveIds.has(item.id) && !products.find(p=>p.id===item.id)?.sold);
@@ -65,6 +65,7 @@ function displayProducts() {
         <h3>${safe(p.name)}</h3>
         <p class="product-size">Taille : ${safe(p.size)}</p>
         <p class="product-price">${money(p.price)} DT</p>
+        ${p.model_url ? `<button class="main-btn model-btn" onclick="openProduct3D(${i})">Voir en 3D</button>` : ""}
         ${p.sold ? '<div class="sold-badge">VENDUE</div>' : `<button class="main-btn" onclick="addToCart(${i})">Ajouter au panier</button>`}
       </div>
     </div>`).join("");
@@ -204,12 +205,15 @@ document.getElementById("productForm").addEventListener("submit", async function
   const price=Number(document.getElementById("productPrice").value);
   const size=document.getElementById("productSize").value.trim();
   const files=Array.from(document.getElementById("productImage").files || []);
+  const modelFile=document.getElementById("productModelFile").files?.[0] || null;
   if (!name || !size || !files.length || !Number.isFinite(price) || price<0) return alert("Vérifiez les informations du produit.");
   if (files.length>36) return alert("تنجم تزيد حتى 36 تصويرة للمنتج الواحد.");
   if (files.some(file=>!file.type.startsWith("image/"))) return alert("Veuillez choisir uniquement des images.");
   if (files.some(file=>file.size>5*1024*1024)) return alert("Chaque image doit faire maximum 5 MB.");
+  if (modelFile && (!modelFile.name.toLowerCase().endsWith(".glb") || modelFile.size>50*1024*1024)) return alert("Le modèle 3D doit être un fichier .GLB de 50 MB maximum.");
   const uploadedPaths=[];
   const imageUrls=[];
+  let modelUrl="";
   for (const file of files) {
     const cleanName=file.name.replace(/[^a-zA-Z0-9._-]/g,"-");
     const path=crypto.randomUUID()+"-"+cleanName;
@@ -223,7 +227,14 @@ document.getElementById("productForm").addEventListener("submit", async function
     const {data:urlData}=supabaseClient.storage.from("product-images").getPublicUrl(path);
     imageUrls.push(urlData.publicUrl);
   }
-  const {error}=await supabaseClient.from("products").insert({name,price,size,image_url:JSON.stringify(imageUrls),sold:false});
+  if (modelFile) {
+    const modelPath=crypto.randomUUID()+"-"+modelFile.name.replace(/[^a-zA-Z0-9._-]/g,"-");
+    const {error:modelUploadError}=await supabaseClient.storage.from("product-images").upload(modelPath,modelFile,{upsert:false,contentType:"model/gltf-binary"});
+    if (modelUploadError) { console.error(modelUploadError); await supabaseClient.storage.from("product-images").remove(uploadedPaths); return alert("Erreur upload du modèle 3D. Vérifiez les droits Storage."); }
+    uploadedPaths.push(modelPath);
+    modelUrl=supabaseClient.storage.from("product-images").getPublicUrl(modelPath).data.publicUrl;
+  }
+  const {error}=await supabaseClient.from("products").insert({name,price,size,image_url:JSON.stringify(imageUrls),model_url:modelUrl || null,sold:false});
   if (error) {
     console.error(error);
     await supabaseClient.storage.from("product-images").remove(uploadedPaths);
@@ -243,6 +254,7 @@ function displayManageProducts() {
       <img src="${safe(p.image)}" alt="${safe(p.name)}">
       <strong>${safe(p.name)}</strong><p>${money(p.price)} DT — ${safe(p.size)}</p>
       <p>${p.sold?"VENDUE":"Disponible"}</p>
+      ${p.model_url ? '<p>Modèle 3D : disponible</p>' : '<p>Modèle 3D : non ajouté</p>'}
       <button onclick="editPrice(${i})">Prix</button>
       <button onclick="editProductName(${i})">Nom</button>
       <button onclick="toggleSold(${i})">${p.sold?"Disponible":"VENDUE"}</button>
