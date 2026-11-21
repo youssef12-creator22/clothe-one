@@ -205,7 +205,7 @@ document.getElementById("productForm").addEventListener("submit", async function
   const size=document.getElementById("productSize").value.trim();
   const files=Array.from(document.getElementById("productImage").files || []);
   if (!name || !size || !files.length || !Number.isFinite(price) || price<0) return alert("Vérifiez les informations du produit.");
-  if (files.length>8) return alert("تنجم تزيد حتى 8 تصاور للمنتج الواحد.");
+  if (files.length>36) return alert("تنجم تزيد حتى 36 تصويرة للمنتج الواحد.");
   if (files.some(file=>!file.type.startsWith("image/"))) return alert("Veuillez choisir uniquement des images.");
   if (files.some(file=>file.size>5*1024*1024)) return alert("Chaque image doit faire maximum 5 MB.");
   const uploadedPaths=[];
