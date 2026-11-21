@@ -617,3 +617,29 @@ footer p {
     border-radius: 5px;
     text-transform: uppercase;
 }
+
+
+/* Interactive 360-degree product spin */
+#viewerImage {
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: transform .18s ease;
+}
+#viewerImage.viewer-grabbing { cursor: grabbing; }
+#viewerImage.viewer-zoomed {
+  transform: scale(1.8);
+  cursor: zoom-out;
+}
+#viewerCounter {
+  padding: 10px 18px;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  margin: auto;
+  background: rgba(20,20,20,.88);
+  border: 1px solid #e50914;
+  border-radius: 30px;
+  font-size: 13px;
+  letter-spacing: .3px;
+}
