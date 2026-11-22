@@ -6,34 +6,27 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const jsonResponse = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
   try {
     const token = Deno.env.get("TELEGRAM_BOT_TOKEN");
     const chatId = Deno.env.get("TELEGRAM_CHAT_ID");
     if (!token || !chatId) {
-      return new Response(JSON.stringify({ error: "Telegram secrets are not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Telegram secrets are missing. Check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in Supabase Secrets." }, 500);
     }
 
     const body = await req.json();
     const order = body?.order;
     if (!order || !Array.isArray(order.items)) {
-      return new Response(JSON.stringify({ error: "Invalid order payload" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Invalid order payload" }, 400);
     }
 
     const lines = [
@@ -67,20 +60,19 @@ Deno.serve(async (req) => {
 
     const telegramResult = await telegramResponse.json();
     if (!telegramResponse.ok || !telegramResult.ok) {
-      return new Response(JSON.stringify({ error: "Telegram API rejected the message" }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      // Return Telegram's safe diagnostic only; never expose the bot token.
+      return jsonResponse({
+        error: "Telegram API rejected the message",
+        telegram_error_code: telegramResult.error_code ?? telegramResponse.status,
+        telegram_description: telegramResult.description ?? "No error description returned",
+      }, 502);
     }
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (_error) {
-    return new Response(JSON.stringify({ error: "Unexpected notification error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ success: true });
+  } catch (error) {
+    return jsonResponse({
+      error: "Unexpected notification error",
+      details: error instanceof Error ? error.message : "Unknown error",
+    }, 500);
   }
 });
