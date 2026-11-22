@@ -643,3 +643,10 @@ footer p {
   font-size: 13px;
   letter-spacing: .3px;
 }
+
+
+/* Product promotions and delivery labels */
+.old-price { color:#999; text-decoration:line-through; font-size:.85em; margin-right:6px; }
+.promo-price { color:#ff303b; font-weight:900; }
+.promo-badge { display:inline-block; background:#e50914; color:#fff; padding:3px 7px; border-radius:4px; font-size:11px; letter-spacing:1px; vertical-align:middle; }
+.delivery-price { color:#bbb; font-size:13px; margin:0 0 12px; }
