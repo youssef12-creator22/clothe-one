@@ -49,25 +49,64 @@
     dragging = false;
   };
 
+  const activePointers = new Map();
+  let pinchStartDistance = 0;
+
+  const pointerDistance = () => {
+    const points = [...activePointers.values()];
+    if (points.length < 2) return 0;
+    return Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+  };
+
   image().addEventListener("pointerdown", event => {
-    if (frames.length < 2 || zoomed) return;
-    dragging = true;
-    startX = event.clientX;
-    image().classList.add("viewer-grabbing");
+    activePointers.set(event.pointerId, {x:event.clientX, y:event.clientY});
     image().setPointerCapture(event.pointerId);
-    event.preventDefault();
-  });
-  image().addEventListener("pointerup", event => {
-    if (!dragging) return;
-    const distance = event.clientX - startX;
-    if (Math.abs(distance) >= 35) {
-      window.changeViewerImage(distance < 0 ? 1 : -1);
+    if (activePointers.size === 2) {
+      dragging = false;
+      pinchStartDistance = pointerDistance();
+      return;
     }
+    if (activePointers.size === 1 && !zoomed) {
+      dragging = true;
+      startX = event.clientX;
+      image().classList.add("viewer-grabbing");
+    }
+  });
+
+  image().addEventListener("pointermove", event => {
+    if (!activePointers.has(event.pointerId)) return;
+    activePointers.set(event.pointerId, {x:event.clientX, y:event.clientY});
+    if (activePointers.size >= 2) {
+      const distance = pointerDistance();
+      if (pinchStartDistance && distance > pinchStartDistance * 1.08) {
+        zoomed = true;
+        image().classList.add("viewer-zoomed");
+      } else if (pinchStartDistance && distance < pinchStartDistance * 0.88) {
+        zoomed = false;
+        image().classList.remove("viewer-zoomed");
+      }
+      return;
+    }
+  });
+
+  image().addEventListener("pointerup", event => {
+    const point = activePointers.get(event.pointerId);
+    if (dragging && point && activePointers.size === 1) {
+      const distance = event.clientX - startX;
+      if (Math.abs(distance) >= 35) {
+        window.changeViewerImage(distance < 0 ? 1 : -1);
+      }
+    }
+    activePointers.delete(event.pointerId);
+    if (activePointers.size < 2) pinchStartDistance = 0;
     dragging = false;
     image().classList.remove("viewer-grabbing");
   });
-  const stopDrag = () => {
+
+  const stopDrag = event => {
+    activePointers.delete(event.pointerId);
     dragging = false;
+    pinchStartDistance = 0;
     image().classList.remove("viewer-grabbing");
   };
   image().addEventListener("pointercancel", stopDrag);
