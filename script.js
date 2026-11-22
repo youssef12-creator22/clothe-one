@@ -175,7 +175,7 @@ document.getElementById("checkoutForm").addEventListener("submit", async functio
     items,delivery_fee:deliveryFee,total,status:"En attente"
   };
   const {error} = await supabaseClient.from("orders").insert(payload);
-  if (error) { console.error(error); alert("Erreur lors de l'envoi. Vérifiez votre connexion et réessayez."); return; }
+  if (error) { console.error("Order insert failed:", error); const detail = [error.message,error.details,error.hint,error.code].filter(Boolean).join(" | "); alert("Erreur Supabase: " + (detail || "Erreur inconnue")); return; }
   const {error:notificationError} = await supabaseClient.functions.invoke("telegram-order-notify", {body:{order:payload}});
   if (notificationError) console.warn("Commande enregistrée, mais notification Telegram non envoyée:",notificationError);
   cart=[]; updateCartCount(); this.reset(); closeCart(); closeCheckout();
