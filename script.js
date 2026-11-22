@@ -48,7 +48,7 @@ async function loadOrders() {
   if (error) { console.error(error); alert("Impossible de charger les commandes."); return; }
   orders = (data || []).map(o => ({
     id:o.id, firstName:o.first_name, lastName:o.last_name, phone:o.phone,
-    city:o.city, address:o.address, items:o.items || [], total:Number(o.total),
+    city:o.city, address:o.address, items:o.items || [], delivery_fee:Number(o.delivery_fee)||0, total:Number(o.total),
     status:o.status || "En attente"
   }));
   displayOrders();
@@ -124,18 +124,21 @@ function openCart() { document.getElementById("cartModal").classList.remove("hid
 function closeCart() { document.getElementById("cartModal").classList.add("hidden"); }
 function displayCart() {
   const container = document.getElementById("cartItems");
-  let total = 0;
-  container.innerHTML = cart.map((item,i) => {
+  let subtotal = 0;
+  let deliveryFee = 0;
+  const rows = cart.map((item,i) => {
     const p = getCartProduct(item);
     if (!p) return "";
     const unitPrice=p.promo_price || p.price;
-    total += (unitPrice+p.delivery_fee)*item.qty;
-    return `<div class="cart-item"><h3>${safe(p.name)}</h3><p>${p.promo_price ? `<span class="old-price">${money(p.price)} DT</span> <span class="promo-price">${money(unitPrice)} DT</span>` : `${money(unitPrice)} DT`}</p><p>Livraison : ${p.delivery_fee>0 ? money(p.delivery_fee)+" DT" : "Gratuite"}</p><p>Quantité : ${item.qty}</p>
+    subtotal += unitPrice*item.qty;
+    deliveryFee = Math.max(deliveryFee, Number(p.delivery_fee)||0);
+    return `<div class="cart-item"><h3>${safe(p.name)}</h3><p>${p.promo_price ? `<span class="old-price">${money(p.price)} DT</span> <span class="promo-price">${money(unitPrice)} DT</span>` : `${money(unitPrice)} DT`}</p><p>Quantité : ${item.qty}</p>
       <button onclick="changeQuantity(${i},-1)">−</button>
       <button onclick="changeQuantity(${i},1)">+</button>
       <button onclick="removeFromCart(${i})">Supprimer</button></div>`;
-  }).join("");
-  document.getElementById("cartTotal").textContent = money(total);
+  });
+  container.innerHTML = rows.join("") + `<p class="delivery-price">Livraison (une seule fois) : ${deliveryFee>0 ? money(deliveryFee)+" DT" : "Gratuite"}</p>`;
+  document.getElementById("cartTotal").textContent = money(subtotal+deliveryFee);
 }
 function changeQuantity(i,amount) {
   const item=cart[i], p=item && getCartProduct(item);
@@ -162,14 +165,16 @@ document.getElementById("checkoutForm").addEventListener("submit", async functio
     const unitPrice=p.promo_price || p.price;
     items.push({product_id:p.id,name:p.name,price:unitPrice,original_price:p.price,promo:!!p.promo_price,delivery_fee:p.delivery_fee,size:p.size,qty:entry.qty});
   }
-  const total = items.reduce((sum,x)=>(sum+(x.price+x.delivery_fee)*x.qty),0);
+  const deliveryFee = items.reduce((max,x)=>Math.max(max,Number(x.delivery_fee)||0),0);
+  const subtotal = items.reduce((sum,x)=>sum+x.price*x.qty,0);
+  const total = subtotal + deliveryFee;
   const payload = {
     first_name:document.getElementById("firstName").value.trim(),
     last_name:document.getElementById("lastName").value.trim(),
     phone:document.getElementById("phone").value.trim(),
     city:document.getElementById("city").value.trim(),
     address:document.getElementById("address").value.trim(),
-    items,total,status:"En attente"
+    items,delivery_fee:deliveryFee,total,status:"En attente"
   };
   const {error} = await supabaseClient.from("orders").insert(payload);
   if (error) { console.error(error); alert("Erreur lors de l'envoi. Vérifiez votre connexion et réessayez."); return; }
@@ -362,6 +367,7 @@ function displayOrders() {
       <p>Client : ${safe(o.firstName)} ${safe(o.lastName)}</p>
       <p>Téléphone : ${safe(o.phone)}</p><p>Ville : ${safe(o.city)}</p><p>Adresse : ${safe(o.address)}</p>
       <p>Articles :</p>${o.items.map(x=>`<p>${safe(x.name)} × ${Number(x.qty)} — ${money(x.price)} DT</p>`).join("")}
+      <p>Livraison (une seule fois) : ${o.delivery_fee>0 ? money(o.delivery_fee)+" DT" : "Gratuite"}</p>
       <strong>Total : ${money(o.total)} DT</strong><p class="status">Statut : ${safe(o.status)}</p>
       <button onclick="changeOrderStatus(${i},'Validée')">Valider</button>
       <button onclick="changeOrderStatus(${i},'Refusée')">Refuser</button>
