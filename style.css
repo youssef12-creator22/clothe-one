@@ -619,7 +619,7 @@ footer p {
 }
 
 
-/* Interactive 360-degree product spin */
+/* Product image zoom and manual swipe navigation — no 360-degree rotation */
 #viewerImage {
   cursor: grab;
   touch-action: pan-y;
