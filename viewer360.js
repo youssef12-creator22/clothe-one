@@ -1,13 +1,11 @@
-/* CLOTHE-ONE 360 product viewer
-   Uses the product's existing multi-angle images as rotation frames. */
+/* CLOTHE-ONE image viewer
+   Manual swipe changes photos one by one; no 360-degree rotation mode. */
 (() => {
   let frames = [];
   let frame = 0;
   let dragging = false;
-  let lastX = 0;
-  let dragRemainder = 0;
+  let startX = 0;
   let zoomed = false;
-  let startDistance = 0;
 
   const viewer = () => document.getElementById("imageViewer");
   const image = () => document.getElementById("viewerImage");
@@ -17,8 +15,8 @@
     if (!frames.length) return;
     image().src = frames[frame];
     counter().textContent = frames.length > 1
-      ? `360° • ${frame + 1}/${frames.length} — اسحب يمين ويسار للدوران`
-      : "زيد صور من زوايا مختلفة باش تفعّل دوران 360°";
+      ? `${frame + 1} / ${frames.length} — اسحب يمين أو يسار لتبديل الصور`
+      : "صورة المنتج";
     document.querySelector(".viewer-prev").style.display = frames.length > 1 ? "block" : "none";
     document.querySelector(".viewer-next").style.display = frames.length > 1 ? "block" : "none";
   }
@@ -51,37 +49,27 @@
     dragging = false;
   };
 
-  function rotateByPixels(delta) {
-    dragRemainder += delta;
-    const step = 18;
-    while (Math.abs(dragRemainder) >= step) {
-      const direction = dragRemainder > 0 ? -1 : 1;
-      frame = (frame + direction + frames.length) % frames.length;
-      dragRemainder += dragRemainder > 0 ? -step : step;
-      render();
-    }
-  }
-
   image().addEventListener("pointerdown", event => {
     if (frames.length < 2 || zoomed) return;
     dragging = true;
-    lastX = event.clientX;
-    dragRemainder = 0;
+    startX = event.clientX;
     image().classList.add("viewer-grabbing");
     image().setPointerCapture(event.pointerId);
     event.preventDefault();
   });
-  image().addEventListener("pointermove", event => {
+  image().addEventListener("pointerup", event => {
     if (!dragging) return;
-    const delta = event.clientX - lastX;
-    lastX = event.clientX;
-    rotateByPixels(delta);
+    const distance = event.clientX - startX;
+    if (Math.abs(distance) >= 35) {
+      window.changeViewerImage(distance < 0 ? 1 : -1);
+    }
+    dragging = false;
+    image().classList.remove("viewer-grabbing");
   });
   const stopDrag = () => {
     dragging = false;
     image().classList.remove("viewer-grabbing");
   };
-  image().addEventListener("pointerup", stopDrag);
   image().addEventListener("pointercancel", stopDrag);
   image().addEventListener("lostpointercapture", stopDrag);
 
@@ -90,8 +78,7 @@
     image().classList.toggle("viewer-zoomed", zoomed);
   });
   image().addEventListener("wheel", event => {
-    if (event.deltaY < 0) zoomed = true;
-    else zoomed = false;
+    zoomed = event.deltaY < 0;
     image().classList.toggle("viewer-zoomed", zoomed);
     event.preventDefault();
   }, {passive:false});
