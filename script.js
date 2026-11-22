@@ -26,11 +26,13 @@ async function loadProducts() {
       const parsed = JSON.parse(p.image_url || '""');
       images = Array.isArray(parsed) ? parsed : (parsed && typeof parsed === "object" && Array.isArray(parsed.images) ? parsed.images : [parsed || p.image_url]);
       var embeddedModelUrl = parsed && !Array.isArray(parsed) && typeof parsed === "object" ? (parsed.model_url || "") : "";
+      var embeddedDeliveryFee = parsed && !Array.isArray(parsed) && typeof parsed === "object" ? Number(parsed.delivery_fee || 0) : 0;
+      var embeddedPromoPrice = parsed && !Array.isArray(parsed) && typeof parsed === "object" && parsed.promo_price != null && parsed.promo_price !== "" ? Number(parsed.promo_price) : null;
     } catch (_) {
       images = [p.image_url || ""];
     }
     images = images.filter(Boolean);
-    return {id:p.id,name:p.name,price:Number(p.price),size:p.size || "",image:images[0] || "",images,model_url:p.model_url || embeddedModelUrl || "",sold:!!p.sold};
+    return {id:p.id,name:p.name,price:Number(p.price),size:p.size || "",image:images[0] || "",images,model_url:p.model_url || embeddedModelUrl || "",delivery_fee:Number.isFinite(embeddedDeliveryFee)?embeddedDeliveryFee:0,promo_price:Number.isFinite(embeddedPromoPrice)&&embeddedPromoPrice>0&&embeddedPromoPrice<Number(p.price)?embeddedPromoPrice:null,sold:!!p.sold};
   });
   const liveIds=new Set(products.map(p=>p.id));
   cart=cart.filter(item=>liveIds.has(item.id) && !products.find(p=>p.id===item.id)?.sold);
@@ -65,7 +67,8 @@ function displayProducts() {
       <div class="product-info">
         <h3>${safe(p.name)}</h3>
         <p class="product-size">Taille : ${safe(p.size)}</p>
-        <p class="product-price">${money(p.price)} DT</p>
+        <p class="product-price">${p.promo_price ? `<span class="old-price">${money(p.price)} DT</span> <span class="promo-price">${money(p.promo_price)} DT</span> <span class="promo-badge">PROMO</span>` : `${money(p.price)} DT`}</p>
+        <p class="delivery-price">${p.delivery_fee>0 ? `Livraison : ${money(p.delivery_fee)} DT` : "Livraison gratuite"}</p>
         ${p.model_url ? `<button class="main-btn model-btn" onclick="openProduct3D(${i})">Voir en 3D</button>` : ""}
         ${p.sold ? '<div class="sold-badge">VENDUE</div>' : `<button class="main-btn" onclick="addToCart(${i})">Ajouter au panier</button>`}
       </div>
@@ -125,8 +128,9 @@ function displayCart() {
   container.innerHTML = cart.map((item,i) => {
     const p = getCartProduct(item);
     if (!p) return "";
-    total += p.price * item.qty;
-    return `<div class="cart-item"><h3>${safe(p.name)}</h3><p>${money(p.price)} DT</p><p>Quantité : ${item.qty}</p>
+    const unitPrice=p.promo_price || p.price;
+    total += (unitPrice+p.delivery_fee)*item.qty;
+    return `<div class="cart-item"><h3>${safe(p.name)}</h3><p>${p.promo_price ? `<span class="old-price">${money(p.price)} DT</span> <span class="promo-price">${money(unitPrice)} DT</span>` : `${money(unitPrice)} DT`}</p><p>Livraison : ${p.delivery_fee>0 ? money(p.delivery_fee)+" DT" : "Gratuite"}</p><p>Quantité : ${item.qty}</p>
       <button onclick="changeQuantity(${i},-1)">−</button>
       <button onclick="changeQuantity(${i},1)">+</button>
       <button onclick="removeFromCart(${i})">Supprimer</button></div>`;
@@ -155,9 +159,10 @@ document.getElementById("checkoutForm").addEventListener("submit", async functio
   for (const entry of cart) {
     const p = getCartProduct(entry);
     if (!p || p.sold) return alert("Un produit de votre panier n'est plus disponible.");
-    items.push({product_id:p.id,name:p.name,price:p.price,size:p.size,qty:entry.qty});
+    const unitPrice=p.promo_price || p.price;
+    items.push({product_id:p.id,name:p.name,price:unitPrice,original_price:p.price,promo:!!p.promo_price,delivery_fee:p.delivery_fee,size:p.size,qty:entry.qty});
   }
-  const total = items.reduce((sum,x)=>sum+x.price*x.qty,0);
+  const total = items.reduce((sum,x)=>(sum+(x.price+x.delivery_fee)*x.qty),0);
   const payload = {
     first_name:document.getElementById("firstName").value.trim(),
     last_name:document.getElementById("lastName").value.trim(),
@@ -207,7 +212,9 @@ document.getElementById("productForm").addEventListener("submit", async function
   const size=document.getElementById("productSize").value.trim();
   const files=Array.from(document.getElementById("productImage").files || []);
   const modelFile=document.getElementById("productModelFile").files?.[0] || null;
-  if (!name || !size || !files.length || !Number.isFinite(price) || price<0) return alert("Vérifiez les informations du produit.");
+  const deliveryRaw=document.getElementById("productDeliveryFee").value.trim();
+  const deliveryFee=deliveryRaw===""?0:Number(deliveryRaw);
+  if (!name || !size || !files.length || !Number.isFinite(price) || price<0 || !Number.isFinite(deliveryFee) || deliveryFee<0) return alert("Vérifiez les informations du produit.");
   if (files.length>36) return alert("تنجم تزيد حتى 36 تصويرة للمنتج الواحد.");
   if (files.some(file=>!file.type.startsWith("image/"))) return alert("Veuillez choisir uniquement des images.");
   if (files.some(file=>file.size>5*1024*1024)) return alert("Chaque image doit faire maximum 5 MB.");
@@ -235,7 +242,7 @@ document.getElementById("productForm").addEventListener("submit", async function
     uploadedPaths.push(modelPath);
     modelUrl=supabaseClient.storage.from("product-images").getPublicUrl(modelPath).data.publicUrl;
   }
-  const {error}=await supabaseClient.from("products").insert({name,price,size,image_url:JSON.stringify({images:imageUrls,model_url:modelUrl}),sold:false});
+  const {error}=await supabaseClient.from("products").insert({name,price,size,image_url:JSON.stringify({images:imageUrls,model_url:modelUrl,delivery_fee:deliveryFee,promo_price:null}),sold:false});
   if (error) {
     console.error(error);
     await supabaseClient.storage.from("product-images").remove(uploadedPaths);
@@ -255,8 +262,12 @@ function displayManageProducts() {
       <img src="${safe(p.image)}" alt="${safe(p.name)}">
       <strong>${safe(p.name)}</strong><p>${money(p.price)} DT — ${safe(p.size)}</p>
       <p>${p.sold?"VENDUE":"Disponible"}</p>
+      <p>Livraison : ${p.delivery_fee>0 ? money(p.delivery_fee)+" DT" : "Gratuite"}</p>
+      <p>${p.promo_price ? `Promotion : ${money(p.price)} DT → ${money(p.promo_price)} DT` : "Aucune promotion"}</p>
       ${p.model_url ? '<p>Modèle 3D : disponible</p>' : '<p>Modèle 3D : non ajouté</p>'}
       <button onclick="editPrice(${i})">Prix</button>
+      <button onclick="editDeliveryFee(${i})">Livraison</button>
+      <button onclick="editPromotion(${i})">${p.promo_price?"Annuler promo":"Promotion"}</button>
       <button onclick="editProductName(${i})">Nom</button>
       <button onclick="toggleSold(${i})">${p.sold?"Disponible":"VENDUE"}</button>
       <button onclick="deleteProduct(${i})">Supprimer</button>
@@ -271,6 +282,29 @@ async function editPrice(i) {
   const {error}=await supabaseClient.from("products").update({price}).eq("id",products[i].id);
   if (error) return alert("Erreur modification prix.");
   await loadProducts();
+}
+async function saveProductMetadata(product, changes) {
+  let meta={images:product.images||[product.image],model_url:product.model_url||"",delivery_fee:product.delivery_fee||0,promo_price:product.promo_price??null};
+  const {data}=await supabaseClient.from("products").select("image_url").eq("id",product.id).single();
+  if(data?.image_url){try{const parsed=JSON.parse(data.image_url);if(parsed&&!Array.isArray(parsed)&&typeof parsed==="object")meta={...meta,...parsed};else if(Array.isArray(parsed))meta.images=parsed;}catch(_){}}
+  const {error}=await supabaseClient.from("products").update({image_url:JSON.stringify({...meta,...changes})}).eq("id",product.id);
+  if(error){console.error(error);alert("Erreur de modification.");return;}
+  await loadProducts();
+}
+async function editDeliveryFee(i){
+  const p=products[i];if(!isAdmin||!p)return;
+  const value=prompt("Prix livraison en DT (laisser vide = gratuite) :",p.delivery_fee>0?p.delivery_fee:"");
+  if(value===null)return;const fee=value.trim()===""?0:Number(value);
+  if(!Number.isFinite(fee)||fee<0)return alert("Prix invalide.");
+  await saveProductMetadata(p,{delivery_fee:fee});
+}
+async function editPromotion(i){
+  const p=products[i];if(!isAdmin||!p)return;
+  if(p.promo_price){if(!confirm("Annuler la promotion et remettre le prix normal ?"))return;await saveProductMetadata(p,{promo_price:null});return;}
+  const value=prompt("Prix promotionnel en DT (prix normal : "+money(p.price)+" DT) :");
+  if(value===null||value.trim()==="")return;const promo=Number(value);
+  if(!Number.isFinite(promo)||promo<=0||promo>=p.price)return alert("Le prix promo doit être inférieur au prix normal.");
+  await saveProductMetadata(p,{promo_price:promo});
 }
 async function editProductName(i) {
   if (!isAdmin || !products[i]) return;
