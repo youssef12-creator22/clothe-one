@@ -174,9 +174,9 @@ document.getElementById("checkoutForm").addEventListener("submit", async functio
     address:document.getElementById("address").value.trim(),
     items,delivery_fee:deliveryFee,total,status:"En attente"
   };
-  const {data:savedOrder,error} = await supabaseClient.from("orders").insert(payload).select("id").single();
+  const {error} = await supabaseClient.from("orders").insert(payload);
   if (error) { console.error(error); alert("Erreur lors de l'envoi. Vérifiez votre connexion et réessayez."); return; }
-  const {error:notificationError} = await supabaseClient.functions.invoke("telegram-order-notify", {body:{order:{...payload,id:savedOrder.id}}});
+  const {error:notificationError} = await supabaseClient.functions.invoke("telegram-order-notify", {body:{order:payload}});
   if (notificationError) console.warn("Commande enregistrée, mais notification Telegram non envoyée:",notificationError);
   cart=[]; updateCartCount(); this.reset(); closeCart(); closeCheckout();
   alert(notificationError ? "Commande enregistrée ! La notification Telegram n'est pas encore configurée." : "Commande envoyée avec succès ! Merci ❤️");
