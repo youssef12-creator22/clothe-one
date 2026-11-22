@@ -257,7 +257,6 @@ function displayManageProducts() {
       <p>${p.sold?"VENDUE":"Disponible"}</p>
       <p>Livraison : ${p.delivery_fee>0 ? money(p.delivery_fee)+" DT" : "Gratuite"}</p>
       <p>${p.promo_price ? `Promotion : ${money(p.price)} DT → ${money(p.promo_price)} DT` : "Aucune promotion"}</p>
-      ${p.model_url ? '<p>Modèle 3D : disponible</p>' : '<p>Modèle 3D : non ajouté</p>'}
       <button onclick="editPrice(${i})">Prix</button>
       <button onclick="editDeliveryFee(${i})">Livraison</button>
       <button onclick="editPromotion(${i})">${p.promo_price?"Annuler promo":"Promotion"}</button>
@@ -277,7 +276,7 @@ async function editPrice(i) {
   await loadProducts();
 }
 async function saveProductMetadata(product, changes) {
-  let meta={images:product.images||[product.image],model_url:product.model_url||"",delivery_fee:product.delivery_fee||0,promo_price:product.promo_price??null};
+  let meta={images:product.images||[product.image],delivery_fee:product.delivery_fee||0,promo_price:product.promo_price??null};
   const {data}=await supabaseClient.from("products").select("image_url").eq("id",product.id).single();
   if(data?.image_url){try{const parsed=JSON.parse(data.image_url);if(parsed&&!Array.isArray(parsed)&&typeof parsed==="object")meta={...meta,...parsed};else if(Array.isArray(parsed))meta.images=parsed;}catch(_){}}
   const {error}=await supabaseClient.from("products").update({image_url:JSON.stringify({...meta,...changes})}).eq("id",product.id);
@@ -326,7 +325,7 @@ async function deleteProduct(i) {
   }
 
   // Also clean up all product photos from the public Storage bucket.
-  const imagePaths=(product.images || [product.image]).concat(product.model_url ? [product.model_url] : []).map(url=>{
+  const imagePaths=(product.images || [product.image]).map(url=>{
     try {
       const marker="/storage/v1/object/public/product-images/";
       const position=String(url).indexOf(marker);
