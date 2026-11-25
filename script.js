@@ -9,6 +9,7 @@ let cart = [];
 let isAdmin = false;
 let viewerImages = [];
 let viewerIndex = 0;
+let selectedCollection = "brand";
 
 function safe(value) {
   return String(value ?? "").replace(/[&<>"']/g, c => ({
@@ -27,11 +28,15 @@ async function loadProducts() {
       images = Array.isArray(parsed) ? parsed : (parsed && typeof parsed === "object" && Array.isArray(parsed.images) ? parsed.images : [parsed || p.image_url]);
       var embeddedDeliveryFee = parsed && !Array.isArray(parsed) && typeof parsed === "object" ? Number(parsed.delivery_fee || 0) : 0;
       var embeddedPromoPrice = parsed && !Array.isArray(parsed) && typeof parsed === "object" && parsed.promo_price != null && parsed.promo_price !== "" ? Number(parsed.promo_price) : null;
+      var embeddedCategory = parsed && !Array.isArray(parsed) && typeof parsed === "object" && parsed.category ? parsed.category : "brand";
     } catch (_) {
       images = [p.image_url || ""];
+      var embeddedCategory = "brand";
+      var embeddedDeliveryFee = 0;
+      var embeddedPromoPrice = null;
     }
     images = images.filter(Boolean);
-    return {id:p.id,name:p.name,price:Number(p.price),size:p.size || "",image:images[0] || "",images,delivery_fee:Number.isFinite(embeddedDeliveryFee)?embeddedDeliveryFee:0,promo_price:Number.isFinite(embeddedPromoPrice)&&embeddedPromoPrice>0&&embeddedPromoPrice<Number(p.price)?embeddedPromoPrice:null,sold:!!p.sold};
+    return {id:p.id,name:p.name,price:Number(p.price),size:p.size || "",category:embeddedCategory,image:images[0] || "",images,delivery_fee:Number.isFinite(embeddedDeliveryFee)?embeddedDeliveryFee:0,promo_price:Number.isFinite(embeddedPromoPrice)&&embeddedPromoPrice>0&&embeddedPromoPrice<Number(p.price)?embeddedPromoPrice:null,sold:!!p.sold};
   });
   const liveIds=new Set(products.map(p=>p.id));
   cart=cart.filter(item=>liveIds.has(item.id) && !products.find(p=>p.id===item.id)?.sold);
@@ -54,25 +59,37 @@ async function loadOrders() {
   updateStats();
 }
 
+function selectCollection(category) {
+  selectedCollection = category === 'streetwear' ? 'streetwear' : 'brand';
+  displayProducts();
+  document.getElementById('shop').scrollIntoView({behavior:'smooth'});
+}
+function showCollections() {
+  document.getElementById('collections').scrollIntoView({behavior:'smooth'});
+}
 function displayProducts() {
-  const container = document.getElementById("products");
-  if (!products.length) {
-    container.innerHTML = '<p style="text-align:center;grid-column:1/-1">Les produits seront bientôt disponibles.</p>';
+  const container = document.getElementById('products');
+  const visibleProducts = products.filter(p => (p.category || 'brand') === selectedCollection);
+  const heading = document.querySelector('#shop .section-heading h2');
+  if (heading) heading.innerHTML = selectedCollection === 'brand' ? 'BRAND <span>CLOTHE</span>' : 'STREETWEAR <span>CLOTHE</span>' ;
+  if (!visibleProducts.length) {
+    container.innerHTML = '<p style="text-align:center;grid-column:1/-1">Aucun produit dans cette collection pour le moment.</p>';
     return;
   }
-  container.innerHTML = products.map((p,i) => `
-    <div class="product-card">
-      <img class="product-image" src="${safe(p.image)}" alt="${safe(p.name)}" onclick="openImageViewer(${i},0)" loading="lazy">
-      <div class="product-info">
-        <h3>${safe(p.name)}</h3>
-        <p class="product-size">Taille : ${safe(p.size)}</p>
-        <p class="product-price">${p.promo_price ? `<span class="old-price">${money(p.price)} DT</span> <span class="promo-price">${money(p.promo_price)} DT</span> <span class="promo-badge">PROMO</span>` : `${money(p.price)} DT`}</p>
-        <p class="delivery-price">${p.delivery_fee>0 ? `Livraison : ${money(p.delivery_fee)} DT` : "Livraison gratuite"}</p>
-        ${p.sold ? '<div class="sold-badge">VENDUE</div>' : `<button class="main-btn" onclick="addToCart(${i})">Ajouter au panier</button>`}
-      </div>
-    </div>`).join("");
+  container.innerHTML = visibleProducts.map(p => {
+    const i = products.indexOf(p);
+    const sizeControl = p.category === 'brand'
+      ? '<label class="size-label" for="size-choice-' + i + '">Choisir la taille</label><select class="product-size-select" id="size-choice-' + i + '"><option value="">Taille</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select>'
+      : '<p class="product-size">Mesures : ' + safe(p.size || 'Voir description') + '</p>';
+    return '<div class="product-card">' +
+      '<img class="product-image" src="' + safe(p.image) + '" alt="' + safe(p.name) + '" onclick="openImageViewer(' + i + ',0)" loading="lazy">' +
+      '<div class="product-info"><h3>' + safe(p.name) + '</h3>' + sizeControl +
+      '<p class="product-price">' + (p.promo_price ? '<span class="old-price">' + money(p.price) + ' DT</span> <span class="promo-price">' + money(p.promo_price) + ' DT</span> <span class="promo-badge">PROMO</span>' : money(p.price) + ' DT') + '</p>' +
+      '<p class="delivery-price">' + (p.delivery_fee > 0 ? 'Livraison : ' + money(p.delivery_fee) + ' DT' : 'Livraison gratuite') + '</p>' +
+      (p.sold ? '<div class="sold-badge">VENDUE</div>' : '<button class="main-btn" onclick="addToCart(' + i + ')">Ajouter au panier</button>') +
+      '</div></div>';
+  }).join('');
 }
-
 function openImageViewer(productIndex, imageIndex=0) {
   const product=products[productIndex];
   if (!product) return;
@@ -108,9 +125,12 @@ function closeImageViewer(event) {
 function addToCart(index) {
   const p = products[index];
   if (!p || p.sold) return alert("Cet article n'est plus disponible.");
-  const found = cart.find(x => x.id === p.id);
+  const sizeSelect = document.getElementById("size-choice-" + index);
+  const selectedSize = p.category === "brand" ? (sizeSelect ? sizeSelect.value : "") : "";
+  if (p.category === "brand" && !selectedSize) return alert("Veuillez choisir une taille.");
+  const found = cart.find(x => x.id === p.id && x.selectedSize === selectedSize);
   if (found) found.qty++;
-  else cart.push({id:p.id,qty:1});
+  else cart.push({id:p.id,qty:1,selectedSize});
   updateCartCount();
   alert("Produit ajouté au panier !");
 }
@@ -130,7 +150,7 @@ function displayCart() {
     const unitPrice=p.promo_price || p.price;
     subtotal += unitPrice*item.qty;
     deliveryFee = Math.max(deliveryFee, Number(p.delivery_fee)||0);
-    return `<div class="cart-item"><h3>${safe(p.name)}</h3><p>${p.promo_price ? `<span class="old-price">${money(p.price)} DT</span> <span class="promo-price">${money(unitPrice)} DT</span>` : `${money(unitPrice)} DT`}</p><p>Quantité : ${item.qty}</p>
+    return `<div class="cart-item"><h3>${safe(p.name)}</h3><p>${p.promo_price ? `<span class="old-price">${money(p.price)} DT</span> <span class="promo-price">${money(unitPrice)} DT</span>` : `${money(unitPrice)} DT`}</p><p>${item.selectedSize ? "Taille : " + safe(item.selectedSize) : "Mesures : " + safe(p.size)}</p><p>Quantité : ${item.qty}</p>
       <button onclick="changeQuantity(${i},-1)">−</button>
       <button onclick="changeQuantity(${i},1)">+</button>
       <button onclick="removeFromCart(${i})">Supprimer</button></div>`;
@@ -161,7 +181,7 @@ document.getElementById("checkoutForm").addEventListener("submit", async functio
     const p = getCartProduct(entry);
     if (!p || p.sold) return alert("Un produit de votre panier n'est plus disponible.");
     const unitPrice=p.promo_price || p.price;
-    items.push({product_id:p.id,name:p.name,price:unitPrice,original_price:p.price,promo:!!p.promo_price,delivery_fee:p.delivery_fee,size:p.size,qty:entry.qty});
+    items.push({product_id:p.id,name:p.name,price:unitPrice,original_price:p.price,promo:!!p.promo_price,delivery_fee:p.delivery_fee,size:entry.selectedSize || p.size,qty:entry.qty});
   }
   const deliveryFee = items.reduce((max,x)=>Math.max(max,Number(x.delivery_fee)||0),0);
   const subtotal = items.reduce((sum,x)=>sum+x.price*x.qty,0);
@@ -214,11 +234,13 @@ document.getElementById("productForm").addEventListener("submit", async function
   if (!isAdmin) return;
   const name=document.getElementById("productName").value.trim();
   const price=Number(document.getElementById("productPrice").value);
-  const size=document.getElementById("productSize").value.trim();
+  const category=document.getElementById("productCategory").value;
+  const enteredSize=document.getElementById("productSize").value.trim();
+  const size=category==="brand" ? "S, M, L, XL, XXL" : enteredSize;
   const files=Array.from(document.getElementById("productImage").files || []);
   const deliveryRaw=document.getElementById("productDeliveryFee").value.trim();
   const deliveryFee=deliveryRaw===""?0:Number(deliveryRaw);
-  if (!name || !size || !files.length || !Number.isFinite(price) || price<0 || !Number.isFinite(deliveryFee) || deliveryFee<0) return alert("Vérifiez les informations du produit.");
+  if (!name || (category==="streetwear" && !size) || !files.length || !Number.isFinite(price) || price<0 || !Number.isFinite(deliveryFee) || deliveryFee<0) return alert("Vérifiez les informations du produit.");
   if (files.length>36) return alert("تنجم تزيد حتى 36 تصويرة للمنتج الواحد.");
   if (files.some(file=>!file.type.startsWith("image/"))) return alert("Veuillez choisir uniquement des images.");
   if (files.some(file=>file.size>5*1024*1024)) return alert("Chaque image doit faire maximum 5 MB.");
@@ -237,7 +259,7 @@ document.getElementById("productForm").addEventListener("submit", async function
     const {data:urlData}=supabaseClient.storage.from("product-images").getPublicUrl(path);
     imageUrls.push(urlData.publicUrl);
   }
-  const {error}=await supabaseClient.from("products").insert({name,price,size,image_url:JSON.stringify({images:imageUrls,delivery_fee:deliveryFee,promo_price:null}),sold:false});
+  const {error}=await supabaseClient.from("products").insert({name,price,size,image_url:JSON.stringify({images:imageUrls,delivery_fee:deliveryFee,promo_price:null,category}),sold:false});
   if (error) {
     console.error(error);
     await supabaseClient.storage.from("product-images").remove(uploadedPaths);
@@ -255,7 +277,7 @@ function displayManageProducts() {
   container.innerHTML=products.map((p,i)=>`
     <div class="manage-item">
       <img src="${safe(p.image)}" alt="${safe(p.name)}">
-      <strong>${safe(p.name)}</strong><p>${money(p.price)} DT — ${safe(p.size)}</p>
+      <strong>${safe(p.name)}</strong><p>${money(p.price)} DT — ${p.category==="brand" ? "Brand Clothe (S, M, L, XL, XXL)" : "Streetwear Clothe — "+safe(p.size)}</p>
       <p>${p.sold?"VENDUE":"Disponible"}</p>
       <p>Livraison : ${p.delivery_fee>0 ? money(p.delivery_fee)+" DT" : "Gratuite"}</p>
       <p>${p.promo_price ? `Promotion : ${money(p.price)} DT → ${money(p.promo_price)} DT` : "Aucune promotion"}</p>
@@ -278,7 +300,7 @@ async function editPrice(i) {
   await loadProducts();
 }
 async function saveProductMetadata(product, changes) {
-  let meta={images:product.images||[product.image],delivery_fee:product.delivery_fee||0,promo_price:product.promo_price??null};
+  let meta={images:product.images||[product.image],delivery_fee:product.delivery_fee||0,promo_price:product.promo_price??null,category:product.category||"brand"};
   const {data}=await supabaseClient.from("products").select("image_url").eq("id",product.id).single();
   if(data?.image_url){try{const parsed=JSON.parse(data.image_url);if(parsed&&!Array.isArray(parsed)&&typeof parsed==="object")meta={...meta,...parsed};else if(Array.isArray(parsed))meta.images=parsed;}catch(_){}}
   const {error}=await supabaseClient.from("products").update({image_url:JSON.stringify({...meta,...changes})}).eq("id",product.id);
