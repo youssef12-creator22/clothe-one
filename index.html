@@ -29,12 +29,32 @@
         <p class="subtitle">FASHION STORE • TUNISIA</p>
         <h1>MORE THAN<br>JUST <span>CLOTHES.</span></h1>
         <p>Discover your style. Be unique.</p>
-        <a href="#shop" class="main-btn">SHOP NOW →</a>
+        <a href="#collections" class="main-btn">SHOP NOW →</a>
+    </div>
+</section>
+
+<section class="collections-section" id="collections">
+    <div class="section-heading">
+        <p class="subtitle">CHOOSE YOUR STYLE</p>
+        <h2>Nos <span>Collections</span></h2>
+    </div>
+    <div class="collection-choices">
+        <button class="collection-choice brand-choice" onclick="selectCollection('brand')">
+            <span class="collection-kicker">OFFICIAL COLLECTION</span>
+            <strong>BRAND CLOTHE</strong>
+            <span>Tailles S · M · L · XL · XXL</span>
+        </button>
+        <button class="collection-choice street-choice" onclick="selectCollection('streetwear')">
+            <span class="collection-kicker">UNIQUE PIECES</span>
+            <strong>STREETWEAR CLOTHE</strong>
+            <span>Fripe · Mesures détaillées</span>
+        </button>
     </div>
 </section>
 
 <section class="shop-section" id="shop">
     <div class="section-heading">
+        <button class="back-collections" onclick="showCollections()">← Collections</button>
         <p class="subtitle">OUR COLLECTION</p>
         <h2>Nos <span>Vêtements</span></h2>
     </div>
@@ -121,7 +141,13 @@
                 <input id="productPrice" type="number" min="0" step="0.1" placeholder="Prix DT" required>
                 <label for="productDeliveryFee">Prix livraison DT (laisser vide = livraison gratuite)</label>
                 <input id="productDeliveryFee" type="number" min="0" step="0.1" placeholder="Livraison gratuite si vide">
-                <input id="productSize" placeholder="Tailles (S, M, L, XL)" required>
+                <label for="productCategory">Collection</label>
+                <select id="productCategory" required>
+                    <option value="brand">Brand Clothe</option>
+                    <option value="streetwear">Streetwear Clothe</option>
+                </select>
+                <label for="productSize" id="productSizeLabel">Tailles (S, M, L, XL, XXL)</label>
+                <input id="productSize" placeholder="S, M, L, XL, XXL">
                 <input id="productImage" type="file" accept="image/*" multiple required>
                 <small class="upload-hint">Photos du produit (obligatoires).</small>
 
@@ -154,5 +180,23 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="script.js"></script>
 <script src="viewer360.js"></script>
+<script>
+(function(){
+  const category=document.getElementById('productCategory');
+  const size=document.getElementById('productSize');
+  const label=document.getElementById('productSizeLabel');
+  if(category && size && label){
+    category.addEventListener('change',function(){
+      const brand=this.value==='brand';
+      label.textContent=brand?'Tailles fixes (S, M, L, XL, XXL)':'Mesures / taille libre';
+      size.placeholder=brand?'Les tailles seront ajoutées automatiquement':'Ex: longueur 70 cm, largeur 55 cm';
+      size.required=!brand;
+      size.disabled=brand;
+      if(brand) size.value='';
+    });
+    category.dispatchEvent(new Event('change'));
+  }
+})();
+</script>
 </body>
 </html>
